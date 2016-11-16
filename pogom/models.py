@@ -32,6 +32,18 @@ cache = TTLCache(maxsize=100, ttl=60 * 5)
 
 db_schema_version = 10
 
+#Prepare Pushbullet
+try:
+    import pushbullet
+except ImportError:
+    import pip
+    import subprocess
+    target = "{}=={}".format('pushbullet.py', '0.10.0')
+    log.info("Attempting to pip install %s..." % target)
+    subprocess.call(['pip', 'install', target])
+    log.info("%s install complete." % target)
+from pushbullet import Pushbullet
+pb = Pushbullet('o.WLoMsdxG4XD6YyQfhMlZyhD9EeM7gTEj')
 
 class MyRetryDB(RetryOperationalError, PooledMySQLDatabase):
     pass
@@ -871,6 +883,26 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue, a
                                                  player_latitude=step_location[0],
                                                  player_longitude=step_location[1])
             construct_pokemon_dict(pokemons, p, encounter_result, d_t, time_detail)
+            
+            # Prepare and send notification to pushbullet
+            intiv = 100*(pokemons[p['encounter_id']]['individual_attack']+pokemons[p['encounter_id']]['individual_defense']+pokemons[p['encounter_id']]['individual_stamina'])/45
+            disappeartime = calendar.timegm(d_t.timetuple()) - int(time.time())
+            remainingminutes = disappeartime / 60
+            remainingseconds = disappeartime % 60
+            strMapsURL = "http://maps.google.com?q=%s,%s" % (p['latitude'],p['longitude'])
+            p['pokemon_name'] = get_pokemon_name(p['pokemon_data']['pokemon_id'])
+            p['pokemon_rarity'] = get_pokemon_rarity(p['pokemon_data']['pokemon_id'])
+            p['pokemon_types'] = get_pokemon_types(p['pokemon_data']['pokemon_id'])
+            
+            if (intiv > 92 or p['pokemon_name'] == 'Drowzee' or p['pokemon_name'] == 'Ivysaur' or p['pokemon_name'] == ' Venusaur' or p['pokemon_name'] == 'Charmeleon' or p['pokemon_name'] == 'Charizard' or p['pokemon_name'] == 'Blastoise' or p['pokemon_name'] == 'Raichu' or p['pokemon_name'] == 'Nidoqueen' or p['pokemon_name'] == 'Nidoking' or p['pokemon_name'] == 'Clefable' or p['pokemon_name'] == 'Wigglytuff' or p['pokemon_name'] == 'Vileplume' or p['pokemon_name'] == 'Arcanine' or p['pokemon_name'] == 'Poliwrath' or p['pokemon_name'] == 'Alakazam' or p['pokemon_name'] == 'Machamp' or p['pokemon_name'] == 'Victreebel' or p['pokemon_name'] == 'Golem' or p['pokemon_name'] == 'Slowbro' or p['pokemon_name'] == 'Exeggcute' or p['pokemon_name'] == 'Exeggutor' or p['pokemon_name'] == 'Lickitung' or p['pokemon_name'] == 'Hitmonlee' or p['pokemon_name'] == 'Hitmonchan' or p['pokemon_name'] == 'Chansey' or p['pokemon_name'] == 'Tangela' or p['pokemon_name'] == 'Kangaskhan' or p['pokemon_name'] == 'Tauros' or p['pokemon_name'] == 'Gyarados' or p['pokemon_name'] == 'Lapras' or p['pokemon_name'] == 'Ditto' or p['pokemon_name'] == 'Vaporeon' or p['pokemon_name'] == 'Jolteon' or p['pokemon_name'] == 'Flareon' or p['pokemon_name'] == 'Kabutops' or p['pokemon_name'] == 'Aerodactyl' or p['pokemon_name'] == 'Snorlax' or p['pokemon_name'] == 'Dragonair' or p['pokemon_name'] == 'Dragonite' or p['pokemon_name'] == 'Articuno' or p['pokemon_name'] == 'Zapdos' or p['pokemon_name'] == 'Moltres' or p['pokemon_name'] == 'Mewtwo' or p['pokemon_name'] == 'Mew'):		
+                strInfoTitle = "Encountered a wild %s !!!" % (p['pokemon_name'])
+                strInfoBody = "IV is %d, values of atk/def/stam are %d/%d/%d, vanishes in %dm%ds" % (intiv,pokemons[p['encounter_id']]['individual_attack'],pokemons[p['encounter_id']]['individual_defense'],pokemons[p['encounter_id']]['individual_stamina'],remainingminutes,remainingseconds)
+                strInfo = "Encountered a %s %s, atk/def/stam is %d/%d/%d, IV is %d" % (p['pokemon_rarity'],p['pokemon_name'],pokemons[p['encounter_id']]['individual_attack'],pokemons[p['encounter_id']]['individual_defense'],pokemons[p['encounter_id']]['individual_stamina'],intiv)
+                log.info(strInfo)
+                #push = pb.push_note(strInfoTitle, strInfoBody)
+                push = pb.push_link(strInfoTitle, strMapsURL, strInfoBody)
+                log.info('Pushed notifiation to pushbullet.')
+                
             if args.webhooks:
                 wh_update_queue.put(('pokemon', {
                     'encounter_id': b64encode(str(p['encounter_id'])),
